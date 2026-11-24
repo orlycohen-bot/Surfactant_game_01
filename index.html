@@ -1,0 +1,2088 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>סימולציית חפ"ש: שמן, מים ומיצלות</title>
+    <!-- טעינת גופן עברי ברור ומודרני ו-Tailwind לעיצוב הממשק -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Rubik', system-ui, -apple-system, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden;
+            background-color: #f1f5f9;
+        }
+
+        /* התאמת הקנבס למניעת גלילה ומגע חלק */
+        canvas {
+            display: block;
+            touch-action: none;
+            transition: filter 0.4s ease, opacity 0.4s ease;
+        }
+
+        /* מצב סיום שלב: החשכה עדינה של הקנבס ללא טקסט עליו */
+        canvas.stage-ended {
+            filter: brightness(0.72) contrast(0.92);
+        }
+
+        /* עיצוב כפתורים מותאם */
+        .stage-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .stage-btn:not(:disabled):hover {
+            transform: translateY(-1px);
+        }
+        .stage-btn:not(:disabled):active {
+            transform: translateY(0px);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col md:flex-row overflow-hidden text-slate-800">
+
+    <!-- אזור המשחק הראשי (משמאל במסכים רחבים) -->
+    <!-- שימוש ב-dir="ltr" על המעטפת כדי להבטיח שהקנבס בצד שמאל והסרגל בצד ימין בדיוק כנדרש -->
+    <div dir="ltr" class="flex-1 flex flex-col md:flex-row h-full w-full overflow-hidden">
+        
+        <!-- מיכל הקנבס (צד שמאל) -->
+        <main id="canvas-container" class="relative flex-1 h-[62vh] md:h-full bg-slate-900 p-2 md:p-3 flex items-center justify-center overflow-hidden">
+            <div class="relative w-full h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-slate-700/80 bg-[#0b192c]">
+                <canvas id="simCanvas" class="w-full h-full"></canvas>
+            </div>
+        </main>
+
+        <!-- סרגל צד (צד ימין, כיוון טסט עברי RTL) -->
+        <aside dir="rtl" class="w-full md:w-[340px] lg:w-[370px] h-[38vh] md:h-full bg-white border-t md:border-t-0 md:border-r border-slate-200 shadow-xl flex flex-col justify-between p-4 md:p-5 overflow-y-auto z-10">
+            
+            <!-- חלק עליון: כותרת, מקרא וכפתור איפוס -->
+            <div>
+                <div class="flex items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                    <div>
+                        <h1 class="text-lg md:text-xl font-bold text-slate-800 leading-tight">חומרים פעילי שטח</h1>
+                        <p class="text-xs text-slate-500">מעבדת כימיה אינטראקטיבית</p>
+                    </div>
+                    <button id="resetBtn" title="איפוס כל השלבים והניקוד"
+                        class="px-3 py-1.5 text-xs font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors flex items-center gap-1 shrink-0 cursor-pointer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                        <span>איפוס משחק</span>
+                    </button>
+                </div>
+
+                <!-- מקרא חזותי קומפקטי -->
+                <div class="mt-3 bg-slate-50/90 border border-slate-200/80 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-3 rounded-full bg-sky-400 inline-block border border-sky-200"></span>
+                        <span>מים</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3.5 h-3.5 rounded-full bg-amber-400 inline-block border border-amber-200"></span>
+                        <span>שמן</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="inline-flex items-center">
+                            <span class="w-2.5 h-2.5 rounded-full bg-teal-300 inline-block"></span>
+                            <span class="w-3 h-1 bg-orange-400 inline-block -mr-0.5 rounded-r"></span>
+                        </span>
+                        <span>חפ"ש (ראש הידרופילי וזנב הידרופובי)</span>
+                    </div>
+                </div>
+
+                <!-- לוח ניקוד וטיימר -->
+                <div class="grid grid-cols-2 gap-2.5 mt-3">
+                    <!-- ניקוד נוכחי -->
+                    <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 text-center">
+                        <div class="text-xs font-medium text-slate-500 mb-0.5">ניקוד נוכחי</div>
+                        <div id="scoreDisplay" dir="ltr" class="text-xl md:text-2xl font-bold text-slate-800 tabular-nums">0</div>
+                    </div>
+                    <!-- טיימר -->
+                    <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 text-center">
+                        <div class="text-xs font-medium text-slate-500 mb-0.5">זמן נותר</div>
+                        <div id="timerDisplay" dir="ltr" class="text-xl md:text-2xl font-bold text-sky-700 tabular-nums">02:00</div>
+                    </div>
+                </div>
+
+                <!-- תיבת הנחיות לשלב הנוכחי -->
+                <div class="mt-3 bg-amber-50/90 border border-amber-200/90 rounded-xl p-3 transition-colors duration-500">
+                    <div class="flex items-center gap-1.5 text-amber-800 font-semibold text-xs mb-1">
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span>הנחיות למשימה</span>
+                    </div>
+                    <p id="instructionText" class="text-sm font-medium text-slate-800 leading-snug">
+                        לחצו על כפתור "שלב 1: שמן ומים" כדי להתחיל בסימולציה.
+                    </p>
+                </div>
+
+                <!-- כפתור סיום שלב מוקדם -->
+                <button id="doneBtn" disabled
+                    class="mt-3 w-full py-2.5 px-4 rounded-xl font-semibold text-sm text-white bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed shadow-sm transition-all cursor-pointer flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    <span>סיום שלב</span>
+                </button>
+            </div>
+
+            <!-- חלק תחתון: בחירת שלבים ותוצאות שמורות -->
+            <div class="mt-4 pt-3 border-t border-slate-100">
+                <div class="text-xs font-semibold text-slate-500 mb-2">שלבי הסימולציה</div>
+                <div class="space-y-2">
+                    <!-- שלב 1 -->
+                    <div class="flex items-center gap-2">
+                        <button id="stageBtn1" data-stage="1"
+                            class="stage-btn flex-1 py-2.5 px-3 rounded-xl text-right font-semibold text-sm border transition-all cursor-pointer flex items-center justify-between bg-sky-600 text-white border-sky-700 shadow-sm">
+                            <span>שלב 1: שמן ומים</span>
+                            <span id="stageIcon1" class="text-xs bg-white/20 px-2 py-0.5 rounded-full">התחל</span>
+                        </button>
+                        <div id="stageResult1" class="min-w-[82px] text-center text-xs font-bold px-2 py-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200">
+                            טרם הושלם
+                        </div>
+                    </div>
+
+                    <!-- שלב 2 -->
+                    <div class="flex items-center gap-2">
+                        <button id="stageBtn2" data-stage="2" disabled
+                            class="stage-btn flex-1 py-2.5 px-3 rounded-xl text-right font-semibold text-sm border transition-all flex items-center justify-between bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed">
+                            <span>שלב 2: חפ"ש ומים</span>
+                            <span id="stageIcon2" class="text-xs">🔒</span>
+                        </button>
+                        <div id="stageResult2" class="min-w-[82px] text-center text-xs font-bold px-2 py-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200">
+                            טרם הושלם
+                        </div>
+                    </div>
+
+                    <!-- שלב 3 -->
+                    <div class="flex items-center gap-2">
+                        <button id="stageBtn3" data-stage="3" disabled
+                            class="stage-btn flex-1 py-2.5 px-3 rounded-xl text-right font-semibold text-sm border transition-all flex items-center justify-between bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed">
+                            <span>שלב 3: שמן, מים וחפ"ש</span>
+                            <span id="stageIcon3" class="text-xs">🔒</span>
+                        </button>
+                        <div id="stageResult3" class="min-w-[82px] text-center text-xs font-bold px-2 py-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200">
+                            טרם הושלם
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        /**
+         * סימולציית כימיה אינטראקטיבית: חומרים פעילי שטח (חפ"ש), שמן ומים.
+         * פותח כקובץ יחיד עצמאי עם מנוע פיזיקלי דו-ממדי מבוסס חלקיקים צפופים.
+         */
+
+        // ==========================================
+        // 1. הגדרות וקבועים פיזיקליים
+        // ==========================================
+        const CONFIG = {
+            WATER_RADIUS: 15.75,         // רדיוס טיפת מים (מוגדל פי 1.5 למניעת כניסה לרווחים בין טיפות שמן)
+            OIL_RADIUS: 38,              // רדיוס טיפת שמן
+            SURF_HEAD_RADIUS: 16.5,      // רדיוס ראש הידרופילי של חפ"ש (מוגדל פי 1.5)
+            SURF_TAIL_LENGTH: 39,        // אורך זנב הידרופובי של חפ"ש (מוגדל פי 1.5)
+            SURF_TAIL_RADIUS: 6.75,      // עובי זנב חפ"ש לחישובי התנגשות (מוגדל פי 1.5)
+            STAGE_DURATION: 120,         // משך שלב בשניות (2 דקות)
+            PHYSICS_SUBSTEPS: 8,         // מספר איטרציות ייצוב התנגשויות בכל פריים
+            WATER_PACKING_RATIO: 0.84,   // צפיפות מילוי המים על הלוח
+            WALL_MARGIN: 4               // מרווח מגבולות הקנבס
+        };
+
+        // הנחיות בעברית לכל שלב
+        const STAGE_INSTRUCTIONS = {
+            0: 'לחצו על כפתור "שלב 1: שמן ומים" כדי להתחיל בסימולציה.',
+            1: 'הזיזו את טיפות השמן ונסו להגיע לניקוד הכי גבוה',
+            2: 'הזיזו את מולקולות החפ"ש ונסו להגיע לניקוד הכי גבוה',
+            3: 'הזיזו את טיפות השמן לתוך המיצלות והגיעו לניקוד 24'
+        };
+
+        // ==========================================
+        // 2. ניהול מצב המשחק (State)
+        // ==========================================
+        const state = {
+            currentStage: 0,             // 0 = מסך פתיחה/המתנה, 1, 2, 3
+            isRunning: false,            // האם השלב פעיל כרגע
+            isStageEnded: false,         // האם השלב הסתיים (טיימר נגמר או לחיצה על סיום)
+            stage3Won: false,            // מעקב אחר מצב ניצחון בשלב 3
+            unlockedStages: [true, false, false], // שלב 1 פתוח כברירת מחדל
+            stageScores: [null, null, null],      // תוצאות סופיות שמורות לכל שלב
+            currentScore: 0,
+            timeRemaining: CONFIG.STAGE_DURATION,
+            lastFrameTime: 0,
+            timerAccumulator: 0,
+
+            // ישויות פיזיקליות בלוח
+            waters: [],
+            oils: [],
+            surfactants: [],
+            micelles: [],                // עבור שלב 3: מיצלות מוכנות מראש
+            particles: [],               // עבור אפקט הזיקוקים
+
+            // מצב גרירה בעכבר/מגע
+            drag: {
+                active: false,
+                type: null,              // 'oil' | 'surfactant' | 'micelle'
+                target: null,
+                offsetX: 0,
+                offsetY: 0,
+                grabLocalX: 0,           // נקודת האחיזה היחסית לסיבוב מולקולת חפ"ש
+                grabLocalY: 0,
+                pointerX: 0,
+                pointerY: 0
+            }
+        };
+
+        // ==========================================
+        // 3. הפניות לרכיבי DOM וקנבס
+        // ==========================================
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const timerDisplay = document.getElementById('timerDisplay');
+        const instructionText = document.getElementById('instructionText');
+        const doneBtn = document.getElementById('doneBtn');
+        const resetBtn = document.getElementById('resetBtn');
+
+        const stageBtns = [
+            document.getElementById('stageBtn1'),
+            document.getElementById('stageBtn2'),
+            document.getElementById('stageBtn3')
+        ];
+        const stageIcons = [
+            document.getElementById('stageIcon1'),
+            document.getElementById('stageIcon2'),
+            document.getElementById('stageIcon3')
+        ];
+        const stageResults = [
+            document.getElementById('stageResult1'),
+            document.getElementById('stageResult2'),
+            document.getElementById('stageResult3')
+        ];
+
+        let canvasWidth = 800;
+        let canvasHeight = 600;
+        let dpr = 1;
+
+        // ==========================================
+        // 4. אתחול והתאמת גודל קנבס
+        // ==========================================
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const prevW = canvasWidth;
+            const prevH = canvasHeight;
+
+            canvasWidth = Math.max(300, Math.floor(rect.width));
+            canvasHeight = Math.max(250, Math.floor(rect.height));
+
+            canvas.width = canvasWidth * dpr;
+            canvas.height = canvasHeight * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            // אם המשחק כבר רץ והמסך שונה בגודלו, התאמת מיקומים יחסית לגבולות החדשים
+            if (prevW > 0 && prevH > 0 && (prevW !== canvasWidth || prevH !== canvasHeight)) {
+                const scaleX = canvasWidth / prevW;
+                const scaleY = canvasHeight / prevH;
+
+                state.waters.forEach(w => {
+                    w.x = clamp(w.x * scaleX, w.r + 2, canvasWidth - w.r - 2);
+                    w.y = clamp(w.y * scaleY, w.r + 2, canvasHeight - w.r - 2);
+                });
+                state.oils.forEach(o => {
+                    o.x = clamp(o.x * scaleX, o.r + 4, canvasWidth - o.r - 4);
+                    o.y = clamp(o.y * scaleY, o.r + 4, canvasHeight - o.r - 4);
+                });
+                state.surfactants.forEach(s => {
+                    s.x = clamp(s.x * scaleX, 34, canvasWidth - 34);
+                    s.y = clamp(s.y * scaleY, 34, canvasHeight - 34);
+                });
+                state.micelles.forEach(m => {
+                    m.x = clamp(m.x * scaleX, m.outerRadius + 4, canvasWidth - m.outerRadius - 4);
+                    m.y = clamp(m.y * scaleY, m.outerRadius + 4, canvasHeight - m.outerRadius - 4);
+                });
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            if (state.currentStage === 0) {
+                buildIdlePreviewBoard();
+            }
+        });
+
+        // ==========================================
+        // 5. פונקציות עזר מתמטיות וגיאומטריות
+        // ==========================================
+        function clamp(val, min, max) {
+            return Math.max(min, Math.min(max, val));
+        }
+
+        function distSq(x1, y1, x2, y2) {
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            return dx * dx + dy * dy;
+        }
+
+        // נקודה קרובה ביותר על קטע AB לנקודה P
+        function closestPointOnSegment(px, py, ax, ay, bx, by) {
+            const abx = bx - ax;
+            const aby = by - ay;
+            const lenSq = abx * abx + aby * aby;
+            if (lenSq === 0) return { x: ax, y: ay, t: 0 };
+            const t = clamp(((px - ax) * abx + (py - ay) * aby) / lenSq, 0, 1);
+            return {
+                x: ax + t * abx,
+                y: ay + t * aby,
+                t: t
+            };
+        }
+
+        // מרחק מינימלי בין שני קטעים AB ו-CD
+        function segmentDistance(ax, ay, bx, by, cx, cy, dx, dy) {
+            const p1 = closestPointOnSegment(ax, ay, cx, cy, dx, dy);
+            const p2 = closestPointOnSegment(bx, by, cx, cy, dx, dy);
+            const p3 = closestPointOnSegment(cx, cy, ax, ay, bx, by);
+            const p4 = closestPointOnSegment(dx, dy, ax, ay, bx, by);
+
+            const d1 = distSq(ax, ay, p1.x, p1.y);
+            const d2 = distSq(bx, by, p2.x, p2.y);
+            const d3 = distSq(cx, cy, p3.x, p3.y);
+            const d4 = distSq(dx, dy, p4.x, p4.y);
+
+            return Math.sqrt(Math.min(d1, d2, d3, d4));
+        }
+
+        // חישוב קואורדינטות ראש וקצה זנב של מולקולת חפ"ש (מוגדל פי 1.5)
+        // (s.x, s.y) הוא מרכז המולקולה, s.angle הוא הכיוון מהראש אל קצה הזנב
+        function getSurfactantGeometry(s) {
+            const cos = Math.cos(s.angle);
+            const sin = Math.sin(s.angle);
+            // הראש נמצא בצד האחורי (-16.5px) והזנב נמשך קדימה (+28.5px)
+            const headOffset = -16.5;
+            const tailTipOffset = 28.5;
+            const tailStartOffset = -3;
+
+            return {
+                headX: s.x + cos * headOffset,
+                headY: s.y + sin * headOffset,
+                tailStartX: s.x + cos * tailStartOffset,
+                tailStartY: s.y + sin * tailStartOffset,
+                tailTipX: s.x + cos * tailTipOffset,
+                tailTipY: s.y + sin * tailTipOffset,
+                cos,
+                sin
+            };
+        }
+
+        // ==========================================
+        // 6. בניית שלבי המשחק ומילוי המים הדינמי
+        // ==========================================
+
+        // מילוי דינמי של כל השטח הפנוי בטיפות מים אחידות ללא חורים
+        function populateWaterDynamically() {
+            state.waters = [];
+            const r = CONFIG.WATER_RADIUS;
+            const spacing = r * 1.96; // מרווח צפוף כך שכל טיפת מים נוגעת בשכנותיה
+            const rows = Math.floor((canvasHeight - r * 2) / (spacing * 0.88));
+            const cols = Math.floor((canvasWidth - r * 2) / spacing);
+
+            const startX = (canvasWidth - (cols - 1) * spacing) / 2;
+            const startY = (canvasHeight - (rows - 1) * spacing * 0.88) / 2;
+
+            for (let row = 0; row < rows; row++) {
+                const rowOffset = (row % 2 === 1) ? spacing * 0.5 : 0;
+                for (let col = 0; col < cols; col++) {
+                    const wx = startX + col * spacing + rowOffset + (Math.random() - 0.5) * 1.5;
+                    const wy = startY + row * spacing * 0.88 + (Math.random() - 0.5) * 1.5;
+
+                    if (wx < r + 2 || wx > canvasWidth - r - 2 || wy < r + 2 || wy > canvasHeight - r - 2) {
+                        continue;
+                    }
+
+                    // בדיקה שלא מציבים מים בתוך טיפת שמן
+                    let blocked = false;
+                    for (const oil of state.oils) {
+                        if (distSq(wx, wy, oil.x, oil.y) < (oil.r + r * 0.88) ** 2) {
+                            blocked = true;
+                            break;
+                        }
+                    }
+                    if (blocked) continue;
+
+                    // בדיקה שלא מציבים מים בתוך מולקולת חפ"ש (שלב 2)
+                    for (const s of state.surfactants) {
+                        const geo = getSurfactantGeometry(s);
+                        if (distSq(wx, wy, geo.headX, geo.headY) < (CONFIG.SURF_HEAD_RADIUS + r * 0.82) ** 2) {
+                            blocked = true;
+                            break;
+                        }
+                        const cp = closestPointOnSegment(wx, wy, geo.tailStartX, geo.tailStartY, geo.tailTipX, geo.tailTipY);
+                        if (distSq(wx, wy, cp.x, cp.y) < (CONFIG.SURF_TAIL_RADIUS + r * 0.82) ** 2) {
+                            blocked = true;
+                            break;
+                        }
+                    }
+                    if (blocked) continue;
+
+                    // בדיקה שלא מציבים מים בתוך מיצלה מוכנה (שלב 3)
+                    for (const m of state.micelles) {
+                        if (distSq(wx, wy, m.x, m.y) < (m.outerRadius + r * 0.75) ** 2) {
+                            blocked = true;
+                            break;
+                        }
+                    }
+                    if (blocked) continue;
+
+                    state.waters.push({
+                        x: wx,
+                        y: wy,
+                        vx: 0,
+                        vy: 0,
+                        r: r,
+                        touchingOil: false
+                    });
+                }
+            }
+        }
+
+        // הצגת לוח רקע רגוע לפני לחיצה על שלב 1
+        function buildIdlePreviewBoard() {
+            state.oils = [];
+            state.surfactants = [];
+            state.micelles = [];
+            populateWaterDynamically();
+        }
+
+        // אתחול שלב 1: 6 טיפות שמן גדולות + מים שממלאים את כל הלוח
+        function initStage1() {
+            state.oils = [];
+            state.surfactants = [];
+            state.micelles = [];
+
+            const numOils = 6;
+            const r = CONFIG.OIL_RADIUS;
+            const margin = r + 35;
+
+            for (let i = 0; i < numOils; i++) {
+                let placed = false;
+                for (let attempt = 0; attempt < 200; attempt++) {
+                    const ox = margin + Math.random() * (canvasWidth - margin * 2);
+                    const oy = margin + Math.random() * (canvasHeight - margin * 2);
+                    let valid = true;
+                    // פיזור ראשוני כך שהטיפות מופרדות זו מזו בתחילת השלב
+                    for (const other of state.oils) {
+                        if (distSq(ox, oy, other.x, other.y) < (r * 2.5) ** 2) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    if (valid) {
+                        state.oils.push({
+                            id: i,
+                            x: ox,
+                            y: oy,
+                            vx: 0,
+                            vy: 0,
+                            r: r,
+                            lockedMicelle: null
+                        });
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed) {
+                    state.oils.push({
+                        id: i,
+                        x: margin + (i % 3) * ((canvasWidth - margin * 2) / 2),
+                        y: margin + Math.floor(i / 3) * (canvasHeight - margin * 2),
+                        vx: 0,
+                        vy: 0,
+                        r: r,
+                        lockedMicelle: null
+                    });
+                }
+            }
+
+            populateWaterDynamically();
+            relaxPhysics(25);
+            updateScore();
+        }
+
+        // אתחול שלב 2: 20 מולקולות חפ"ש מוגדלות פי 1.5 + מים שממלאים את שאר הלוח
+        function initStage2() {
+            state.oils = [];
+            state.surfactants = [];
+            state.micelles = [];
+
+            const numSurf = 20;
+            const margin = 48;
+            const fallbackCols = 5;
+            const fallbackRows = Math.ceil(numSurf / fallbackCols);
+
+            for (let i = 0; i < numSurf; i++) {
+                let placed = false;
+                for (let attempt = 0; attempt < 250; attempt++) {
+                    const sx = margin + Math.random() * (canvasWidth - margin * 2);
+                    const sy = margin + Math.random() * (canvasHeight - margin * 2);
+                    let valid = true;
+                    for (const other of state.surfactants) {
+                        if (distSq(sx, sy, other.x, other.y) < 68 ** 2) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    if (valid) {
+                        state.surfactants.push({
+                            id: i,
+                            x: sx,
+                            y: sy,
+                            vx: 0,
+                            vy: 0,
+                            angle: Math.random() * Math.PI * 2,
+                            angularVel: 0,
+                            tailBondedCount: 0,
+                            tailTouchingTail: false,
+                            tailTouchingWater: false
+                        });
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed) {
+                    const col = i % fallbackCols;
+                    const row = Math.floor(i / fallbackCols);
+                    state.surfactants.push({
+                        id: i,
+                        x: margin + col * ((canvasWidth - margin * 2) / Math.max(1, fallbackCols - 1)),
+                        y: margin + row * ((canvasHeight - margin * 2) / Math.max(1, fallbackRows - 1)),
+                        vx: 0,
+                        vy: 0,
+                        angle: Math.random() * Math.PI * 2,
+                        angularVel: 0,
+                        tailBondedCount: 0,
+                        tailTouchingTail: false,
+                        tailTouchingWater: false
+                    });
+                }
+            }
+
+            populateWaterDynamically();
+            relaxPhysics(25);
+            updateScore();
+        }
+
+        // אתחול שלב 3: 6 מיצלות מוכנות מראש + 6 טיפות שמן + מים
+        function initStage3() {
+            state.oils = [];
+            state.surfactants = [];
+            state.micelles = [];
+
+            const count = 6;
+            const micelleOuterR = 54; // רדיוס חיצוני של טבעת הראשים ההידרופיליים
+            const oilR = CONFIG.OIL_RADIUS;
+            const margin = micelleOuterR + 24;
+
+            // מיקום 6 מיצלות ו-6 טיפות שמן בלי חפיפה התחלתית
+            const placedCircles = [];
+
+            // יצירת 6 מיצלות סגורות (ראשים בחוץ, זנבות פונים פנימה)
+            for (let i = 0; i < count; i++) {
+                let mx = margin, my = margin;
+                for (let attempt = 0; attempt < 300; attempt++) {
+                    const cx = margin + Math.random() * (canvasWidth - margin * 2);
+                    const cy = margin + Math.random() * (canvasHeight - margin * 2);
+                    let valid = true;
+                    for (const p of placedCircles) {
+                        if (distSq(cx, cy, p.x, p.y) < (micelleOuterR + p.r + 22) ** 2) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    if (valid) {
+                        mx = cx;
+                        my = cy;
+                        break;
+                    }
+                }
+                placedCircles.push({ x: mx, y: my, r: micelleOuterR });
+                state.micelles.push({
+                    id: i,
+                    x: mx,
+                    y: my,
+                    vx: 0,
+                    vy: 0,
+                    outerRadius: micelleOuterR,
+                    headRadius: 10.5,
+                    numSurfactants: 10,
+                    rotation: Math.random() * Math.PI * 2,
+                    containedOil: null
+                });
+            }
+
+            // יצירת 6 טיפות שמן חופשיות
+            for (let i = 0; i < count; i++) {
+                let ox = margin, oy = margin;
+                for (let attempt = 0; attempt < 300; attempt++) {
+                    const cx = margin + Math.random() * (canvasWidth - margin * 2);
+                    const cy = margin + Math.random() * (canvasHeight - margin * 2);
+                    let valid = true;
+                    for (const p of placedCircles) {
+                        if (distSq(cx, cy, p.x, p.y) < (oilR + p.r + 20) ** 2) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    if (valid) {
+                        ox = cx;
+                        oy = cy;
+                        break;
+                    }
+                }
+                placedCircles.push({ x: ox, y: oy, r: oilR });
+                state.oils.push({
+                    id: i,
+                    x: ox,
+                    y: oy,
+                    vx: 0,
+                    vy: 0,
+                    r: oilR,
+                    lockedMicelle: null
+                });
+            }
+
+            populateWaterDynamically();
+            relaxPhysics(25);
+            updateScore();
+        }
+
+        // ==========================================
+        // 7. מנוע פיזיקה והתנגשויות (2D Rigid Body Packing)
+        // ==========================================
+        function stepPhysics(dt) {
+            if (!state.isRunning || state.isStageEnded) return;
+
+            // 1. טיפול בגרירה אקטיבית של המשתמש
+            if (state.drag.active && state.drag.target) {
+                const target = state.drag.target;
+                const desiredX = state.drag.pointerX - state.drag.offsetX;
+                const desiredY = state.drag.pointerY - state.drag.offsetY;
+
+                if (state.drag.type === 'oil') {
+                    // אם טיפת השמן כבר נעולה בתוך מיצלה (שלב 3), מזיזים את המיצלה יחד איתה
+                    if (target.lockedMicelle) {
+                        const m = target.lockedMicelle;
+                        m.vx = (desiredX - m.x) * 0.45;
+                        m.vy = (desiredY - m.y) * 0.45;
+                        m.x += m.vx;
+                        m.y += m.vy;
+                        target.x = m.x;
+                        target.y = m.y;
+                    } else {
+                        target.vx = (desiredX - target.x) * 0.48;
+                        target.vy = (desiredY - target.y) * 0.48;
+                        target.x += target.vx;
+                        target.y += target.vy;
+                    }
+                } else if (state.drag.type === 'micelle') {
+                    target.vx = (desiredX - target.x) * 0.45;
+                    target.vy = (desiredY - target.y) * 0.45;
+                    target.x += target.vx;
+                    target.y += target.vy;
+                    if (target.containedOil) {
+                        target.containedOil.x = target.x;
+                        target.containedOil.y = target.y;
+                    }
+                } else if (state.drag.type === 'surfactant') {
+                    // חישוב מומנט סיבוב טבעי כאשר גוררים את הראש או הזנב של מולקולת חפ"ש
+                    const pullX = state.drag.pointerX;
+                    const pullY = state.drag.pointerY;
+
+                    // נקודת האחיזה הנוכחית בעולם לפי זווית המולקולה
+                    const cos = Math.cos(target.angle);
+                    const sin = Math.sin(target.angle);
+                    const worldGrabX = target.x + (state.drag.grabLocalX * cos - state.drag.grabLocalY * sin);
+                    const worldGrabY = target.y + (state.drag.grabLocalX * sin + state.drag.grabLocalY * cos);
+
+                    const fx = (pullX - worldGrabX) * 0.42;
+                    const fy = (pullY - worldGrabY) * 0.42;
+
+                    target.vx = fx;
+                    target.vy = fy;
+                    target.x += fx;
+                    target.y += fy;
+
+                    // מומנט סיבוב (Torque = r x F) סביב מרכז המולקולה
+                    const rx = worldGrabX - target.x;
+                    const ry = worldGrabY - target.y;
+                    const torque = (rx * fy - ry * fx) * 0.0012;
+                    target.angularVel = clamp(target.angularVel + torque, -0.18, 0.18);
+                }
+            }
+
+            // 2. כוחות בין-מולקולריים בשלב 2: משיכה מגנטית וסיבוב זנבות ליצירת מיצלה
+            if (state.currentStage === 2) {
+                applySurfactantMicelleForces();
+            }
+
+            // 3. בדיקת כניסה ונעילה של טיפת שמן לתוך מיצלה בשלב 3
+            if (state.currentStage === 3) {
+                checkStage3Encapsulation();
+            }
+
+            // 4. אינטגרציית תנועה וריסון (Damping)
+            const centerX = canvasWidth * 0.5;
+            const centerY = canvasHeight * 0.5;
+
+            for (const w of state.waters) {
+                // לחץ מילוי עדין ששומר על אחידות ודוחף מים למלא חללים ריקים מאחורי גופים נעים
+                const toCenterX = (centerX - w.x) * 0.00018;
+                const toCenterY = (centerY - w.y) * 0.00018;
+                // תנועה תרמית מיקרוסקופית עדינה למניעת קיפאון מוחלט
+                const jitterX = (Math.random() - 0.5) * 0.08;
+                const jitterY = (Math.random() - 0.5) * 0.08;
+
+                w.vx = (w.vx + toCenterX + jitterX) * 0.84;
+                w.vy = (w.vy + toCenterY + jitterY) * 0.84;
+                w.x += w.vx;
+                w.y += w.vy;
+            }
+
+            for (const o of state.oils) {
+                if (o.lockedMicelle) {
+                    o.x = o.lockedMicelle.x;
+                    o.y = o.lockedMicelle.y;
+                    o.vx = 0;
+                    o.vy = 0;
+                } else {
+                    if (!(state.drag.active && state.drag.target === o)) {
+                        o.vx *= 0.82;
+                        o.vy *= 0.82;
+                        o.x += o.vx;
+                        o.y += o.vy;
+                    }
+                }
+            }
+
+            for (const s of state.surfactants) {
+                if (!(state.drag.active && state.drag.target === s)) {
+                    // ריסון מוגבר כאשר המולקולה כבר מחוברת למיצלה כדי למנוע ריצוד
+                    const linearDamp = s.tailBondedCount > 0 ? 0.55 : 0.80;
+                    s.vx *= linearDamp;
+                    s.vy *= linearDamp;
+                    if (Math.abs(s.vx) < 0.015) s.vx = 0;
+                    if (Math.abs(s.vy) < 0.015) s.vy = 0;
+                    s.x += s.vx;
+                    s.y += s.vy;
+                }
+                const angularDamp = s.tailBondedCount > 0 ? 0.45 : 0.75;
+                s.angularVel *= angularDamp;
+                if (Math.abs(s.angularVel) < 0.002) s.angularVel = 0;
+                s.angle += s.angularVel;
+            }
+
+            for (const m of state.micelles) {
+                if (!(state.drag.active && (state.drag.target === m || state.drag.target === m.containedOil))) {
+                    m.vx *= 0.82;
+                    m.vy *= 0.82;
+                    m.x += m.vx;
+                    m.y += m.vy;
+                }
+                if (m.containedOil) {
+                    m.containedOil.x = m.x;
+                    m.containedOil.y = m.y;
+                }
+            }
+
+            // 5. פתרון התנגשויות במספר איטרציות לשמירה על צפיפות חלקיקים מלאה
+            relaxPhysics(CONFIG.PHYSICS_SUBSTEPS);
+
+            // 6. עדכון ניקוד רציף
+            updateScore();
+        }
+
+        // כוחות משיכה מגנטית וסידור זנבות של מולקולות חפ"ש ליצירת מיצלה (שלב 2)
+        function applySurfactantMicelleForces() {
+            const surfs = state.surfactants;
+            const n = surfs.length;
+            const geometries = surfs.map(getSurfactantGeometry);
+
+            // זיהוי אשכולות (Clusters) של זנבות מחוברים כדי לייצב את מרכז המיצלה ולמנוע קריסה לנקודה אחת
+            const visited = new Array(n).fill(false);
+            const clusters = [];
+
+            for (let i = 0; i < n; i++) {
+                if (visited[i]) continue;
+                const cluster = [];
+                const queue = [i];
+                visited[i] = true;
+
+                while (queue.length > 0) {
+                    const curr = queue.shift();
+                    cluster.push(curr);
+                    const gCurr = geometries[curr];
+
+                    for (let j = 0; j < n; j++) {
+                        if (visited[j]) continue;
+                        const gNext = geometries[j];
+                        const dSeg = segmentDistance(
+                            gCurr.tailStartX, gCurr.tailStartY, gCurr.tailTipX, gCurr.tailTipY,
+                            gNext.tailStartX, gNext.tailStartY, gNext.tailTipX, gNext.tailTipY
+                        );
+                        const dTip = Math.hypot(gNext.tailTipX - gCurr.tailTipX, gNext.tailTipY - gCurr.tailTipY);
+                        if (dSeg < 28 || dTip < 52) {
+                            visited[j] = true;
+                            queue.push(j);
+                        }
+                    }
+                }
+                clusters.push(cluster);
+            }
+
+            // 1. משיכה בין זנבות קרובים שעדיין לא התחברו
+            for (let i = 0; i < n; i++) {
+                const s1 = surfs[i];
+                const g1 = geometries[i];
+
+                for (let j = i + 1; j < n; j++) {
+                    const s2 = surfs[j];
+                    const g2 = geometries[j];
+
+                    const dx = g2.tailTipX - g1.tailTipX;
+                    const dy = g2.tailTipY - g1.tailTipY;
+                    const d = Math.hypot(dx, dy);
+
+                    // משיכה רק בטווח ביניים (24 עד 120 פיקסלים) כדי לא לדחוס זנבות שכבר מחוברים
+                    if (d < 120 && d > 24) {
+                        const nx = dx / d;
+                        const ny = dy / d;
+                        const snapStrength = d < 56 ? 0.14 : 0.065;
+
+                        if (!(state.drag.active && state.drag.target === s1)) {
+                            s1.vx += nx * snapStrength;
+                            s1.vy += ny * snapStrength;
+                        }
+                        if (!(state.drag.active && state.drag.target === s2)) {
+                            s2.vx -= nx * snapStrength;
+                            s2.vy -= ny * snapStrength;
+                        }
+                    }
+                }
+            }
+
+            // 2. ייצוב רדיאלי של כל אשכול (מיצלה) סביב מעגל ליבה פנימי מוגדר
+            for (const cluster of clusters) {
+                if (cluster.length < 2) continue;
+
+                // חישוב מרכז הכובד של קצות הזנבות באשכול (ליבת המיצלה)
+                let coreX = 0;
+                let coreY = 0;
+                for (const idx of cluster) {
+                    coreX += geometries[idx].tailTipX;
+                    coreY += geometries[idx].tailTipY;
+                }
+                coreX /= cluster.length;
+                coreY /= cluster.length;
+
+                // רדיוס שיווי משקל של המרכז המולקולרי המותאם לגודל הראשים המוגדלים (1.5x) ולמספר המולקולות
+                const headDiameter = CONFIG.SURF_HEAD_RADIUS * 2;
+                const idealHeadRingRadius = (cluster.length * headDiameter * 1.04) / (2 * Math.PI);
+                const targetCenterDist = Math.max(36, idealHeadRingRadius - 16.5);
+
+                for (const idx of cluster) {
+                    const s = surfs[idx];
+                    const isDragged = state.drag.active && state.drag.target === s;
+
+                    const dxToCore = coreX - s.x;
+                    const dyToCore = coreY - s.y;
+                    const distToCore = Math.hypot(dxToCore, dyToCore);
+
+                    if (distToCore > 0.5) {
+                        // כיוון הזווית הרצויה: הזנב מצביע בעדינות אל מרכז הליבה
+                        const desiredAngle = Math.atan2(dyToCore, dxToCore);
+                        const angleDiff = normalizeAngle(desiredAngle - s.angle);
+
+                        // אזור מת (Deadzone) קטן שמונע תיקוני מיקרו-זווית וריצוד
+                        if (Math.abs(angleDiff) > 0.03) {
+                            s.angularVel += angleDiff * 0.06;
+                        }
+
+                        // שמירה רכה על מרחק שיווי המשקל מהליבה (קפיץ מרוסן)
+                        if (!isDragged) {
+                            const radialError = distToCore - targetCenterDist;
+                            if (Math.abs(radialError) > 1.2) {
+                                const nx = dxToCore / distToCore;
+                                const ny = dyToCore / distToCore;
+                                const radialForce = clamp(radialError * 0.045, -0.6, 0.6);
+                                s.vx += nx * radialForce;
+                                s.vy += ny * radialForce;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function normalizeAngle(a) {
+            while (a > Math.PI) a -= Math.PI * 2;
+            while (a < -Math.PI) a += Math.PI * 2;
+            return a;
+        }
+
+        // בדיקת לכידת טיפת שמן בתוך מיצלה מוכנה בשלב 3
+        function checkStage3Encapsulation() {
+            for (const oil of state.oils) {
+                if (oil.lockedMicelle) continue;
+
+                for (const m of state.micelles) {
+                    if (m.containedOil) continue;
+
+                    const d = Math.hypot(oil.x - m.x, oil.y - m.y);
+                    // אם טיפת השמן נגררה אל מרכז המיצלה (מרחק קטן מ-38 פיקסלים)
+                    if (d < 38) {
+                        oil.lockedMicelle = m;
+                        m.containedOil = oil;
+                        oil.x = m.x;
+                        oil.y = m.y;
+                        oil.vx = 0;
+                        oil.vy = 0;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // פתרון התנגשויות 2D מלא (מים-מים, מים-שמן, שמן-שמן, מים-חפ"ש, מים-מיצלה, גבולות לוח)
+        function relaxPhysics(iterations) {
+            const waters = state.waters;
+            const oils = state.oils;
+            const surfs = state.surfactants;
+            const micelles = state.micelles;
+            const wCount = waters.length;
+
+            // חלוקה לרשת מרחבית (Spatial Grid) להאצת בדיקת התנגשויות מים-מים
+            const cellSize = CONFIG.WATER_RADIUS * 2.2;
+            const gridCols = Math.ceil(canvasWidth / cellSize) + 1;
+            const gridRows = Math.ceil(canvasHeight / cellSize) + 1;
+            const grid = new Array(gridCols * gridRows);
+
+            for (let iter = 0; iter < iterations; iter++) {
+                // איפוס רשת מרחבית
+                for (let k = 0; k < grid.length; k++) grid[k] = null;
+
+                for (let i = 0; i < wCount; i++) {
+                    const w = waters[i];
+                    const gx = clamp(Math.floor(w.x / cellSize), 0, gridCols - 1);
+                    const gy = clamp(Math.floor(w.y / cellSize), 0, gridRows - 1);
+                    const idx = gy * gridCols + gx;
+                    w._next = grid[idx];
+                    grid[idx] = i;
+                }
+
+                // 1. התנגשויות מים-מים (שמירה על צפיפות אחידה ולחץ רציף)
+                for (let i = 0; i < wCount; i++) {
+                    const w1 = waters[i];
+                    const gx = clamp(Math.floor(w1.x / cellSize), 0, gridCols - 1);
+                    const gy = clamp(Math.floor(w1.y / cellSize), 0, gridRows - 1);
+
+                    for (let ny = Math.max(0, gy - 1); ny <= Math.min(gridRows - 1, gy + 1); ny++) {
+                        for (let nx = Math.max(0, gx - 1); nx <= Math.min(gridCols - 1, gx + 1); nx++) {
+                            let j = grid[ny * gridCols + nx];
+                            while (j !== null) {
+                                if (j > i) {
+                                    const w2 = waters[j];
+                                    const dx = w2.x - w1.x;
+                                    const dy = w2.y - w1.y;
+                                    const minDist = w1.r + w2.r;
+                                    const dSq = dx * dx + dy * dy;
+
+                                    if (dSq < minDist * minDist && dSq > 0.0001) {
+                                        const d = Math.sqrt(dSq);
+                                        const overlap = (minDist - d) * 0.5;
+                                        const pushX = (dx / d) * overlap;
+                                        const pushY = (dy / d) * overlap;
+                                        w1.x -= pushX;
+                                        w1.y -= pushY;
+                                        w2.x += pushX;
+                                        w2.y += pushY;
+                                    }
+                                }
+                                j = waters[j]._next;
+                            }
+                        }
+                    }
+                }
+
+                // 2. התנגשויות שמן-שמן (טיפות שמן יושבות זו ליד זו ואינן מתמזגות)
+                for (let i = 0; i < oils.length; i++) {
+                    const o1 = oils[i];
+                    if (o1.lockedMicelle) continue;
+
+                    for (let j = i + 1; j < oils.length; j++) {
+                        const o2 = oils[j];
+                        if (o2.lockedMicelle) continue;
+
+                        const dx = o2.x - o1.x;
+                        const dy = o2.y - o1.y;
+                        const minDist = o1.r + o2.r;
+                        const dSq = dx * dx + dy * dy;
+
+                        if (dSq < minDist * minDist && dSq > 0.0001) {
+                            const d = Math.sqrt(dSq);
+                            const overlap = (minDist - d) * 0.5;
+                            const pushX = (dx / d) * overlap;
+                            const pushY = (dy / d) * overlap;
+
+                            const o1Dragged = state.drag.active && state.drag.target === o1;
+                            const o2Dragged = state.drag.active && state.drag.target === o2;
+
+                            if (o1Dragged && !o2Dragged) {
+                                o2.x += pushX * 2;
+                                o2.y += pushY * 2;
+                            } else if (o2Dragged && !o1Dragged) {
+                                o1.x -= pushX * 2;
+                                o1.y -= pushY * 2;
+                            } else {
+                                o1.x -= pushX;
+                                o1.y -= pushY;
+                                o2.x += pushX;
+                                o2.y += pushY;
+                            }
+                        }
+                    }
+                }
+
+                // 3. התנגשויות מים-שמן (מים נדחפים הצידה סביב טיפות שמן חשופות)
+                for (const oil of oils) {
+                    if (oil.lockedMicelle) continue; // שמן בתוך מיצלה מוגן לחלוטין ממים
+
+                    for (let i = 0; i < wCount; i++) {
+                        const w = waters[i];
+                        const dx = w.x - oil.x;
+                        const dy = w.y - oil.y;
+                        const minDist = oil.r + w.r;
+                        const dSq = dx * dx + dy * dy;
+
+                        if (dSq < minDist * minDist && dSq > 0.0001) {
+                            const d = Math.sqrt(dSq);
+                            const overlap = minDist - d;
+                            const nx = dx / d;
+                            const ny = dy / d;
+
+                            // המים קלים הרבה יותר ולכן נדחפים החוצה כמעט לגמרי
+                            w.x += nx * overlap * 0.94;
+                            w.y += ny * overlap * 0.94;
+                            if (!(state.drag.active && state.drag.target === oil)) {
+                                oil.x -= nx * overlap * 0.06;
+                                oil.y -= ny * overlap * 0.06;
+                            }
+                        }
+                    }
+                }
+
+                // 4. התנגשויות של מולקולות חפ"ש (שלב 2) עם מים ועם מולקולות חפ"ש אחרות
+                if (surfs.length > 0) {
+                    const geos = surfs.map(getSurfactantGeometry);
+
+                    // התנגשות ראש-ראש וראש-זנב בין מולקולות חפ"ש למניעת חפיפה
+                    for (let i = 0; i < surfs.length; i++) {
+                        for (let j = i + 1; j < surfs.length; j++) {
+                            const s1 = surfs[i], s2 = surfs[j];
+                            const g1 = geos[i], g2 = geos[j];
+
+                            // ראש מול ראש
+                            let dx = g2.headX - g1.headX;
+                            let dy = g2.headY - g1.headY;
+                            let minDist = CONFIG.SURF_HEAD_RADIUS * 2;
+                            let dSq = dx * dx + dy * dy;
+
+                            if (dSq < minDist * minDist && dSq > 0.0001) {
+                                const d = Math.sqrt(dSq);
+                                const overlap = (minDist - d) * 0.5;
+                                const px = (dx / d) * overlap;
+                                const py = (dy / d) * overlap;
+                                s1.x -= px;
+                                s1.y -= py;
+                                s2.x += px;
+                                s2.y += py;
+                            }
+
+                            // ראש 1 מול זנב 2
+                            const cp12 = closestPointOnSegment(g1.headX, g1.headY, g2.tailStartX, g2.tailStartY, g2.tailTipX, g2.tailTipY);
+                            dx = g1.headX - cp12.x;
+                            dy = g1.headY - cp12.y;
+                            minDist = CONFIG.SURF_HEAD_RADIUS + CONFIG.SURF_TAIL_RADIUS;
+                            dSq = dx * dx + dy * dy;
+                            if (dSq < minDist * minDist && dSq > 0.0001) {
+                                const d = Math.sqrt(dSq);
+                                const overlap = (minDist - d) * 0.5;
+                                const px = (dx / d) * overlap;
+                                const py = (dy / d) * overlap;
+                                s1.x += px;
+                                s1.y += py;
+                                s2.x -= px;
+                                s2.y -= py;
+                            }
+
+                            // ראש 2 מול זנב 1
+                            const cp21 = closestPointOnSegment(g2.headX, g2.headY, g1.tailStartX, g1.tailStartY, g1.tailTipX, g1.tailTipY);
+                            dx = g2.headX - cp21.x;
+                            dy = g2.headY - cp21.y;
+                            dSq = dx * dx + dy * dy;
+                            if (dSq < minDist * minDist && dSq > 0.0001) {
+                                const d = Math.sqrt(dSq);
+                                const overlap = (minDist - d) * 0.5;
+                                const px = (dx / d) * overlap;
+                                const py = (dy / d) * overlap;
+                                s2.x += px;
+                                s2.y += py;
+                                s1.x -= px;
+                                s1.y -= py;
+                            }
+                        }
+                    }
+
+                    // התנגשות מולקולות חפ"ש עם טיפות מים (ראש וזנב דוחפים מים)
+                    for (let sIdx = 0; sIdx < surfs.length; sIdx++) {
+                        const s = surfs[sIdx];
+                        const g = geos[sIdx];
+                        const isDragged = state.drag.active && state.drag.target === s;
+                        // מולקולה המחוברת למיצלה יציבה בהרבה מול דחיפות אקראיות של טיפות מים
+                        const surfRecoilFactor = isDragged ? 0 : (s.tailBondedCount > 0 ? 0.015 : 0.08);
+                        const waterPushFactor = 1 - surfRecoilFactor;
+
+                        for (let i = 0; i < wCount; i++) {
+                            const w = waters[i];
+
+                            // בדיקת ראש הידרופילי
+                            let dx = w.x - g.headX;
+                            let dy = w.y - g.headY;
+                            let minDist = CONFIG.SURF_HEAD_RADIUS + w.r;
+                            let dSq = dx * dx + dy * dy;
+                            if (dSq < minDist * minDist && dSq > 0.0001) {
+                                const d = Math.sqrt(dSq);
+                                const overlap = minDist - d;
+                                const nx = dx / d;
+                                const ny = dy / d;
+                                w.x += nx * overlap * waterPushFactor;
+                                w.y += ny * overlap * waterPushFactor;
+                                if (surfRecoilFactor > 0) {
+                                    s.x -= nx * overlap * surfRecoilFactor;
+                                    s.y -= ny * overlap * surfRecoilFactor;
+                                }
+                            }
+
+                            // בדיקת זנב הידרופובי (קפסולה)
+                            const cp = closestPointOnSegment(w.x, w.y, g.tailStartX, g.tailStartY, g.tailTipX, g.tailTipY);
+                            dx = w.x - cp.x;
+                            dy = w.y - cp.y;
+                            minDist = CONFIG.SURF_TAIL_RADIUS + w.r;
+                            dSq = dx * dx + dy * dy;
+                            if (dSq < minDist * minDist && dSq > 0.0001) {
+                                const d = Math.sqrt(dSq);
+                                const overlap = minDist - d;
+                                const nx = dx / d;
+                                const ny = dy / d;
+                                w.x += nx * overlap * waterPushFactor;
+                                w.y += ny * overlap * waterPushFactor;
+                                if (surfRecoilFactor > 0) {
+                                    s.x -= nx * overlap * surfRecoilFactor;
+                                    s.y -= ny * overlap * surfRecoilFactor;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 5. התנגשויות של מיצלות מוכנות (שלב 3) עם מים, שמן ומיצלות אחרות
+                if (micelles.length > 0) {
+                    // מיצלה מול מיצלה
+                    for (let i = 0; i < micelles.length; i++) {
+                        for (let j = i + 1; j < micelles.length; j++) {
+                            const m1 = micelles[i], m2 = micelles[j];
+                            const dx = m2.x - m1.x;
+                            const dy = m2.y - m1.y;
+                            const minDist = m1.outerRadius + m2.outerRadius;
+                            const dSq = dx * dx + dy * dy;
+                            if (dSq < minDist * minDist && dSq > 0.0001) {
+                                const d = Math.sqrt(dSq);
+                                const overlap = (minDist - d) * 0.5;
+                                const px = (dx / d) * overlap;
+                                const py = (dy / d) * overlap;
+                                m1.x -= px;
+                                m1.y -= py;
+                                m2.x += px;
+                                m2.y += py;
+                            }
+                        }
+                    }
+
+                    // מיצלה מול מים (המים מתנגשים בטבעת החיצונית של הראשים ההידרופיליים)
+                    for (const m of micelles) {
+                        const mDragged = state.drag.active && (state.drag.target === m || state.drag.target === m.containedOil);
+                        for (let i = 0; i < wCount; i++) {
+                            const w = waters[i];
+                            const dx = w.x - m.x;
+                            const dy = w.y - m.y;
+                            const minDist = m.outerRadius + w.r;
+                            const dSq = dx * dx + dy * dy;
+                            if (dSq < minDist * minDist && dSq > 0.0001) {
+                                const d = Math.sqrt(dSq);
+                                const overlap = minDist - d;
+                                const nx = dx / d;
+                                const ny = dy / d;
+                                w.x += nx * overlap * 0.95;
+                                w.y += ny * overlap * 0.95;
+                                if (!mDragged) {
+                                    m.x -= nx * overlap * 0.05;
+                                    m.y -= ny * overlap * 0.05;
+                                }
+                            }
+                        }
+
+                        // מיצלה תפוסה מול טיפת שמן חופשית אחרת (שמן נוסף לא יכול להיכנס למיצלה שכבר מלאה)
+                        if (m.containedOil) {
+                            for (const oil of oils) {
+                                if (oil.lockedMicelle) continue;
+                                const dx = oil.x - m.x;
+                                const dy = oil.y - m.y;
+                                const minDist = m.outerRadius + oil.r;
+                                const dSq = dx * dx + dy * dy;
+                                if (dSq < minDist * minDist && dSq > 0.0001) {
+                                    const d = Math.sqrt(dSq);
+                                    const overlap = (minDist - d) * 0.5;
+                                    const px = (dx / d) * overlap;
+                                    const py = (dy / d) * overlap;
+                                    oil.x += px;
+                                    oil.y += py;
+                                    m.x -= px;
+                                    m.y -= py;
+                                }
+                            }
+                        }
+
+                        if (m.containedOil) {
+                            m.containedOil.x = m.x;
+                            m.containedOil.y = m.y;
+                        }
+                    }
+                }
+
+                // 6. שמירה על כל החלקיקים בתוך גבולות הקנבס
+                const pad = CONFIG.WALL_MARGIN;
+                for (let i = 0; i < wCount; i++) {
+                    const w = waters[i];
+                    w.x = clamp(w.x, w.r + pad, canvasWidth - w.r - pad);
+                    w.y = clamp(w.y, w.r + pad, canvasHeight - w.r - pad);
+                }
+                for (const o of oils) {
+                    if (o.lockedMicelle) continue;
+                    o.x = clamp(o.x, o.r + pad, canvasWidth - o.r - pad);
+                    o.y = clamp(o.y, o.r + pad, canvasHeight - o.r - pad);
+                }
+                for (const s of surfs) {
+                    s.x = clamp(s.x, 33 + pad, canvasWidth - 33 - pad);
+                    s.y = clamp(s.y, 33 + pad, canvasHeight - 33 - pad);
+                }
+                for (const m of micelles) {
+                    m.x = clamp(m.x, m.outerRadius + pad, canvasWidth - m.outerRadius - pad);
+                    m.y = clamp(m.y, m.outerRadius + pad, canvasHeight - m.outerRadius - pad);
+                    if (m.containedOil) {
+                        m.containedOil.x = m.x;
+                        m.containedOil.y = m.y;
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 8. חישוב ניקוד ואינטראקציות לכל שלב
+        // ==========================================
+        function updateScore() {
+            let score = 0;
+
+            if (state.currentStage === 1 || state.currentStage === 3) {
+                // -1 נקודה על כל טיפת מים הנוגעת (או קרובה מאוד) לטיפת שמן חשופה
+                const touchThreshold = 3.2;
+
+                for (const w of state.waters) {
+                    w.touchingOil = false;
+                    for (const oil of state.oils) {
+                        if (oil.lockedMicelle) continue; // שמן הלכוד בתוך מיצלה אינו נוגע במים!
+
+                        const maxDist = oil.r + w.r + touchThreshold;
+                        if (distSq(w.x, w.y, oil.x, oil.y) <= maxDist * maxDist) {
+                            w.touchingOil = true;
+                            break;
+                        }
+                    }
+                    if (w.touchingOil) {
+                        score -= 1;
+                    }
+                }
+
+                // בשלב 3: +4 נקודות על כל טיפת שמן שנכנסת לתוך מיצלה (מקסימום 24 עבור 6 טיפות)
+                if (state.currentStage === 3) {
+                    for (const oil of state.oils) {
+                        if (oil.lockedMicelle) {
+                            score += 4;
+                        }
+                    }
+
+                    // בדיקת תנאי ניצחון והפעלת זיקוקים לשלב 3 (24 נקודות)
+                    if (!state.stage3Won) {
+                        const allOilsLocked = state.oils.length > 0 && state.oils.every(o => o.lockedMicelle !== null);
+                        const maxScore = state.oils.length * 4;
+                        if (allOilsLocked && score === maxScore) {
+                            state.stage3Won = true;
+                            triggerConfetti();
+                            
+                            // עדכון חזותי לתיבת ההנחיות לחגיגת ההצלחה
+                            const instrBox = instructionText.parentElement;
+                            instrBox.className = "mt-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 transition-colors duration-500";
+                            instrBox.querySelector('div').className = "flex items-center gap-1.5 text-emerald-700 font-bold text-xs mb-1";
+                            instrBox.querySelector('div').innerHTML = '<span>🎉 משימה הושלמה!</span>';
+                            
+                            instructionText.textContent = "כל טיפות השמן נוקו ונאספו לתוך המיצלות בהצלחה (24 נקודות).";
+                            instructionText.className = "text-sm font-bold text-emerald-800 leading-snug";
+                        }
+                    }
+                }
+
+            } else if (state.currentStage === 2) {
+                // שלב 2:
+                // -1 לכל זנב של מולקולת חפ"ש שנוגע במים (ואינו מוגן בתוך מיצלה)
+                // +1 לכל זנב של מולקולת חפ"ש שנוגע בזנב אחר
+                // כל זנב נספר בנפרד כך שהניקוד המקסימלי הוא 1 * מספר המולקולות (20)
+                const surfs = state.surfactants;
+                const geos = surfs.map(getSurfactantGeometry);
+                const tailTouchThreshold = CONFIG.SURF_TAIL_RADIUS * 2 + 8;
+
+                for (let i = 0; i < surfs.length; i++) {
+                    surfs[i].tailBondedCount = 0;
+                    surfs[i].tailTouchingTail = false;
+                    surfs[i].tailTouchingWater = false;
+                }
+
+                // בדיקה עבור כל זנב האם הוא נוגע בזנב אחר
+                for (let i = 0; i < surfs.length; i++) {
+                    const g1 = geos[i];
+                    for (let j = i + 1; j < surfs.length; j++) {
+                        const g2 = geos[j];
+                        const dSeg = segmentDistance(
+                            g1.tailStartX, g1.tailStartY, g1.tailTipX, g1.tailTipY,
+                            g2.tailStartX, g2.tailStartY, g2.tailTipX, g2.tailTipY
+                        );
+                        if (dSeg <= tailTouchThreshold) {
+                            surfs[i].tailBondedCount++;
+                            surfs[j].tailBondedCount++;
+                            surfs[i].tailTouchingTail = true;
+                            surfs[j].tailTouchingTail = true;
+                        }
+                    }
+                }
+
+                // בדיקה עבור כל זנב האם הוא נוגע במים וסיכום הניקוד לכל זנב בנפרד
+                for (let i = 0; i < surfs.length; i++) {
+                    const s = surfs[i];
+                    const g = geos[i];
+
+                    // כאשר מולקולה מחוברת ל-2 זנבות שכנים או יותר, הזנב שלה מוגן בליבת המיצלה
+                    if (s.tailBondedCount >= 2) {
+                        s.tailTouchingWater = false;
+                    } else {
+                        for (const w of state.waters) {
+                            const cp = closestPointOnSegment(w.x, w.y, g.tailStartX, g.tailStartY, g.tailTipX, g.tailTipY);
+                            const d = Math.hypot(w.x - cp.x, w.y - cp.y);
+                            if (d <= CONFIG.SURF_TAIL_RADIUS + w.r + 2.5) {
+                                s.tailTouchingWater = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (s.tailTouchingTail) score += 1;
+                    if (s.tailTouchingWater) score -= 1;
+                }
+            }
+
+            state.currentScore = score;
+            renderScoreText();
+        }
+
+        function renderScoreText() {
+            const formatted = Number.isInteger(state.currentScore)
+                ? state.currentScore.toString()
+                : state.currentScore.toFixed(1);
+            scoreDisplay.textContent = formatted;
+
+            if (state.currentScore > 0) {
+                scoreDisplay.className = 'text-xl md:text-2xl font-bold text-emerald-600 tabular-nums';
+            } else if (state.currentScore < 0) {
+                scoreDisplay.className = 'text-xl md:text-2xl font-bold text-rose-600 tabular-nums';
+            } else {
+                scoreDisplay.className = 'text-xl md:text-2xl font-bold text-slate-800 tabular-nums';
+            }
+        }
+
+        // ==========================================
+        // 9. ציור הקנבס (HTML5 Canvas 2D API)
+        // ==========================================
+        function drawScene() {
+            // רקע מעבדה כהה-עמוק המדגיש את הצבעים של המים, השמן והחפ"ש
+            ctx.fillStyle = '#0c1e35';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            // רשת מדידה עדינה ברקע
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
+            ctx.lineWidth = 1;
+            const gridStep = 40;
+            ctx.beginPath();
+            for (let x = gridStep; x < canvasWidth; x += gridStep) {
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvasHeight);
+            }
+            for (let y = gridStep; y < canvasHeight; y += gridStep) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvasWidth, y);
+            }
+            ctx.stroke();
+
+            // 1. ציור טיפות מים (עיגולים כחולים)
+            for (const w of state.waters) {
+                ctx.beginPath();
+                ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+                ctx.fillStyle = w.touchingOil ? '#38bdf8' : '#0284c7';
+                ctx.fill();
+
+                ctx.lineWidth = 1;
+                ctx.strokeStyle = w.touchingOil ? 'rgba(254, 240, 138, 0.7)' : 'rgba(125, 211, 252, 0.35)';
+                ctx.stroke();
+
+                // נקודת ברק עדינה על טיפת המים
+                ctx.beginPath();
+                ctx.arc(w.x - w.r * 0.3, w.y - w.r * 0.3, w.r * 0.24, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+                ctx.fill();
+            }
+
+            // 2. ציור מיצלות מוכנות מראש (שלב 3)
+            for (const m of state.micelles) {
+                drawPrebuiltMicelle(m);
+            }
+
+            // 3. ציור טיפות שמן (עיגולים צהובים גדולים)
+            for (const oil of state.oils) {
+                drawOilDroplet(oil);
+            }
+
+            // 4. ציור מולקולות חפ"ש בודדות (שלב 2)
+            if (state.surfactants.length > 0) {
+                for (const s of state.surfactants) {
+                    drawSurfactantLollipop(s);
+                }
+            }
+
+            // 5. ציור תוויות ניקוד דינמיות על גבי האינטראקציות (-1, +1, +4)
+            drawFloatingScoreCues();
+
+            // 6. ציור חלקיקי זיקוקים אם קיימים (מוצגים מעל הכל)
+            if (state.particles && state.particles.length > 0) {
+                drawParticles();
+            }
+        }
+
+        function drawOilDroplet(oil) {
+            const r = oil.lockedMicelle ? oil.r * 0.72 : oil.r;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(oil.x, oil.y, r, 0, Math.PI * 2);
+
+            // גרדיאנט רדיאלי למראה שומני מבריק
+            const grad = ctx.createRadialGradient(
+                oil.x - r * 0.28, oil.y - r * 0.28, r * 0.1,
+                oil.x, oil.y, r
+            );
+            grad.addColorStop(0, '#fef08a');
+            grad.addColorStop(0.55, '#facc15');
+            grad.addColorStop(1, '#ca8a04');
+
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#fef9c3';
+            ctx.stroke();
+
+            // השתקפות אור על טיפת השמן
+            ctx.beginPath();
+            ctx.ellipse(oil.x - r * 0.3, oil.y - r * 0.32, r * 0.24, r * 0.13, -Math.PI / 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawSurfactantLollipop(s) {
+            const g = getSurfactantGeometry(s);
+
+            ctx.save();
+            // ציור הזנב ההידרופובי (מוגדל פי 1.5)
+            ctx.beginPath();
+            ctx.moveTo(g.headX, g.headY);
+            ctx.lineTo(g.tailTipX, g.tailTipY);
+            ctx.lineCap = 'round';
+            ctx.lineWidth = 8.25;
+            ctx.strokeStyle = '#fb923c';
+            ctx.stroke();
+
+            ctx.lineWidth = 3.75;
+            ctx.strokeStyle = '#fde047';
+            ctx.stroke();
+
+            // ציור הראש ההידרופילי (עיגול תכלת/טורקיז מוגדל פי 1.5)
+            ctx.beginPath();
+            ctx.arc(g.headX, g.headY, CONFIG.SURF_HEAD_RADIUS, 0, Math.PI * 2);
+            const headGrad = ctx.createRadialGradient(
+                g.headX - 4.5, g.headY - 4.5, 3,
+                g.headX, g.headY, CONFIG.SURF_HEAD_RADIUS
+            );
+            headGrad.addColorStop(0, '#a5f3fc');
+            headGrad.addColorStop(0.7, '#22d3ee');
+            headGrad.addColorStop(1, '#0891b2');
+            ctx.fillStyle = headGrad;
+            ctx.fill();
+
+            ctx.lineWidth = 1.75;
+            ctx.strokeStyle = '#cffafe';
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawPrebuiltMicelle(m) {
+            ctx.save();
+            // הילה פנימית עדינה המראה את הליבה ההידרופובית של המיצלה
+            ctx.beginPath();
+            ctx.arc(m.x, m.y, m.outerRadius - 6, 0, Math.PI * 2);
+            ctx.fillStyle = m.containedOil ? 'rgba(250, 204, 21, 0.18)' : 'rgba(251, 146, 60, 0.14)';
+            ctx.fill();
+
+            const count = m.numSurfactants;
+            const headDist = m.outerRadius - m.headRadius;
+            const tailInnerDist = m.containedOil ? (m.containedOil.r * 0.72 + 2) : 14;
+
+            // ציור כל מולקולות החפ"ש המרכיבות את טבעת המיצלה (ראשים בחוץ, זנבות פנימה)
+            for (let i = 0; i < count; i++) {
+                const angle = m.rotation + (i / count) * Math.PI * 2;
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+
+                const hx = m.x + cos * headDist;
+                const hy = m.y + sin * headDist;
+                const tx = m.x + cos * tailInnerDist;
+                const ty = m.y + sin * tailInnerDist;
+
+                // זנב הידרופובי פונה פנימה
+                ctx.beginPath();
+                ctx.moveTo(hx, hy);
+                ctx.lineTo(tx, ty);
+                ctx.lineCap = 'round';
+                ctx.lineWidth = 5;
+                ctx.strokeStyle = '#fb923c';
+                ctx.stroke();
+
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#fde047';
+                ctx.stroke();
+
+                // ראש הידרופילי פונה החוצה למים
+                ctx.beginPath();
+                ctx.arc(hx, hy, m.headRadius, 0, Math.PI * 2);
+                ctx.fillStyle = '#22d3ee';
+                ctx.fill();
+                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = '#cffafe';
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawFloatingScoreCues() {
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            if (state.currentStage === 1 || state.currentStage === 3) {
+                // הצגת "-1" על כל טיפת מים שנוגעת בטיפת שמן חשופה
+                ctx.font = 'bold 12px Rubik, sans-serif';
+                for (const w of state.waters) {
+                    if (w.touchingOil) {
+                        ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+                        ctx.beginPath();
+                        ctx.roundRect(w.x - 10, w.y - 8, 20, 16, 4);
+                        ctx.fill();
+
+                        ctx.fillStyle = '#fca5a5';
+                        ctx.fillText('-1', w.x, w.y + 0.5);
+                    }
+                }
+
+                // בשלב 3: הצגת "+4" על כל טיפת שמן שנכנסה לתוך מיצלה
+                if (state.currentStage === 3) {
+                    ctx.font = 'bold 13px Rubik, sans-serif';
+                    for (const oil of state.oils) {
+                        if (oil.lockedMicelle) {
+                            ctx.fillStyle = 'rgba(6, 78, 59, 0.9)';
+                            ctx.beginPath();
+                            ctx.roundRect(oil.x - 13, oil.y - 9, 26, 18, 5);
+                            ctx.fill();
+
+                            ctx.fillStyle = '#6ee7b7';
+                            ctx.fillText('+4', oil.x, oil.y + 0.5);
+                        }
+                    }
+                }
+            } else if (state.currentStage === 2) {
+                // הצגת "+1" או "-1" לכל זנב של מולקולת חפ"ש בנפרד
+                ctx.font = 'bold 11px Rubik, sans-serif';
+                const surfs = state.surfactants;
+                const geos = surfs.map(getSurfactantGeometry);
+
+                for (let i = 0; i < surfs.length; i++) {
+                    const s = surfs[i];
+                    const g = geos[i];
+                    const cueX = (g.tailStartX + g.tailTipX) * 0.5;
+                    const cueY = (g.tailStartY + g.tailTipY) * 0.5;
+
+                    if (s.tailTouchingTail && !s.tailTouchingWater) {
+                        ctx.fillStyle = 'rgba(6, 78, 59, 0.88)';
+                        ctx.beginPath();
+                        ctx.roundRect(cueX - 10, cueY - 7, 20, 14, 4);
+                        ctx.fill();
+
+                        ctx.fillStyle = '#6ee7b7';
+                        ctx.fillText('+1', cueX, cueY + 0.5);
+                    } else if (!s.tailTouchingTail && s.tailTouchingWater) {
+                        ctx.fillStyle = 'rgba(127, 29, 29, 0.88)';
+                        ctx.beginPath();
+                        ctx.roundRect(cueX - 10, cueY - 7, 20, 14, 4);
+                        ctx.fill();
+
+                        ctx.fillStyle = '#fecaca';
+                        ctx.fillText('-1', cueX, cueY + 0.5);
+                    } else if (s.tailTouchingTail && s.tailTouchingWater) {
+                        ctx.fillStyle = 'rgba(30, 41, 59, 0.88)';
+                        ctx.beginPath();
+                        ctx.roundRect(cueX - 15, cueY - 7, 30, 14, 4);
+                        ctx.fill();
+
+                        ctx.fillStyle = '#fde047';
+                        ctx.fillText('+1/-1', cueX, cueY + 0.5);
+                    }
+                }
+            }
+
+            ctx.restore();
+        }
+
+        // ==========================================
+        // 10. אפקטים מיוחדים (זיקוקים)
+        // ==========================================
+        function triggerConfetti() {
+            // יצירת 5 מוקדי התפוצצות של זיקוקים
+            const bursts = [
+                { x: canvasWidth * 0.2, y: canvasHeight * 0.35 },
+                { x: canvasWidth * 0.8, y: canvasHeight * 0.35 },
+                { x: canvasWidth * 0.5, y: canvasHeight * 0.25 },
+                { x: canvasWidth * 0.35, y: canvasHeight * 0.15 },
+                { x: canvasWidth * 0.65, y: canvasHeight * 0.15 }
+            ];
+            
+            for (const b of bursts) {
+                for (let i = 0; i < 70; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = Math.random() * 9 + 2;
+                    state.particles.push({
+                        x: b.x,
+                        y: b.y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        color: ['#f87171', '#fbbf24', '#34d399', '#38bdf8', '#c084fc', '#fde047', '#a78bfa'][Math.floor(Math.random() * 7)],
+                        size: Math.random() * 5 + 3,
+                        life: 1.2 + Math.random() * 0.5, // מתחיל מעל 1 כדי להישאר בולט לפני דעיכה
+                        decay: Math.random() * 0.015 + 0.01
+                    });
+                }
+            }
+        }
+
+        function updateParticles() {
+            for (let i = state.particles.length - 1; i >= 0; i--) {
+                const p = state.particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vx *= 0.95;  // התנגדות אוויר
+                p.vy *= 0.95;
+                p.vy += 0.15;  // כוח כבידה קל
+                p.life -= p.decay;
+                
+                if (p.life <= 0) {
+                    state.particles.splice(i, 1);
+                }
+            }
+        }
+
+        function drawParticles() {
+            for (const p of state.particles) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // ==========================================
+        // 11. אינטראקציית גרירה (Mouse & Touch)
+        // ==========================================
+        function getPointerPos(evt) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+            const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function handlePointerDown(evt) {
+            if (!state.isRunning || state.isStageEnded) return;
+            const pos = getPointerPos(evt);
+            state.drag.pointerX = pos.x;
+            state.drag.pointerY = pos.y;
+
+            // שלב 1 או שלב 3: בדיקה אם נלחצה טיפת שמן
+            if (state.currentStage === 1 || state.currentStage === 3) {
+                for (let i = state.oils.length - 1; i >= 0; i--) {
+                    const oil = state.oils[i];
+                    const hitR = oil.lockedMicelle ? oil.lockedMicelle.outerRadius : oil.r;
+                    if (distSq(pos.x, pos.y, oil.x, oil.y) <= hitR * hitR) {
+                        state.drag.active = true;
+                        state.drag.type = 'oil';
+                        state.drag.target = oil;
+                        state.drag.offsetX = pos.x - oil.x;
+                        state.drag.offsetY = pos.y - oil.y;
+                        canvas.style.cursor = 'grabbing';
+                        return;
+                    }
+                }
+            }
+
+            // שלב 3: בדיקה אם נלחצה מיצלה (ניתנת להזזה אך לא לפירוק)
+            if (state.currentStage === 3) {
+                for (let i = state.micelles.length - 1; i >= 0; i--) {
+                    const m = state.micelles[i];
+                    if (distSq(pos.x, pos.y, m.x, m.y) <= m.outerRadius * m.outerRadius) {
+                        state.drag.active = true;
+                        state.drag.type = 'micelle';
+                        state.drag.target = m;
+                        state.drag.offsetX = pos.x - m.x;
+                        state.drag.offsetY = pos.y - m.y;
+                        canvas.style.cursor = 'grabbing';
+                        return;
+                    }
+                }
+            }
+
+            // שלב 2: בדיקה אם נלחצה מולקולת חפ"ש (ראש או זנב)
+            if (state.currentStage === 2) {
+                for (let i = state.surfactants.length - 1; i >= 0; i--) {
+                    const s = state.surfactants[i];
+                    const g = getSurfactantGeometry(s);
+
+                    const dHead = Math.hypot(pos.x - g.headX, pos.y - g.headY);
+                    const cp = closestPointOnSegment(pos.x, pos.y, g.headX, g.headY, g.tailTipX, g.tailTipY);
+                    const dTail = Math.hypot(pos.x - cp.x, pos.y - cp.y);
+
+                    if (dHead <= CONFIG.SURF_HEAD_RADIUS + 8 || dTail <= 16) {
+                        state.drag.active = true;
+                        state.drag.type = 'surfactant';
+                        state.drag.target = s;
+                        state.drag.offsetX = pos.x - s.x;
+                        state.drag.offsetY = pos.y - s.y;
+
+                        // שמירת נקודת האחיזה במערכת הצירים המקומית של המולקולה לצורך סיבוב
+                        const dx = pos.x - s.x;
+                        const dy = pos.y - s.y;
+                        const cos = Math.cos(-s.angle);
+                        const sin = Math.sin(-s.angle);
+                        state.drag.grabLocalX = dx * cos - dy * sin;
+                        state.drag.grabLocalY = dx * sin + dy * cos;
+
+                        canvas.style.cursor = 'grabbing';
+                        return;
+                    }
+                }
+            }
+        }
+
+        function handlePointerMove(evt) {
+            if (!state.isRunning || state.isStageEnded) {
+                canvas.style.cursor = 'default';
+                return;
+            }
+            const pos = getPointerPos(evt);
+            state.drag.pointerX = pos.x;
+            state.drag.pointerY = pos.y;
+
+            if (state.drag.active) {
+                evt.preventDefault();
+                return;
+            }
+
+            // עדכון סמן העכבר בריחוף מעל עצם ניתן לגרירה
+            let hoveringDraggable = false;
+            if (state.currentStage === 1 || state.currentStage === 3) {
+                for (const oil of state.oils) {
+                    if (distSq(pos.x, pos.y, oil.x, oil.y) <= oil.r * oil.r) {
+                        hoveringDraggable = true;
+                        break;
+                    }
+                }
+            }
+            if (!hoveringDraggable && state.currentStage === 3) {
+                for (const m of state.micelles) {
+                    if (distSq(pos.x, pos.y, m.x, m.y) <= m.outerRadius * m.outerRadius) {
+                        hoveringDraggable = true;
+                        break;
+                    }
+                }
+            }
+            if (!hoveringDraggable && state.currentStage === 2) {
+                for (const s of state.surfactants) {
+                    const g = getSurfactantGeometry(s);
+                    const cp = closestPointOnSegment(pos.x, pos.y, g.headX, g.headY, g.tailTipX, g.tailTipY);
+                    if (Math.hypot(pos.x - cp.x, pos.y - cp.y) <= 22) {
+                        hoveringDraggable = true;
+                        break;
+                    }
+                }
+            }
+            canvas.style.cursor = hoveringDraggable ? 'grab' : 'default';
+        }
+
+        function handlePointerUp() {
+            state.drag.active = false;
+            state.drag.target = null;
+            state.drag.type = null;
+            canvas.style.cursor = 'default';
+        }
+
+        canvas.addEventListener('mousedown', handlePointerDown);
+        window.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+
+        canvas.addEventListener('touchstart', handlePointerDown, { passive: false });
+        window.addEventListener('touchmove', handlePointerMove, { passive: false });
+        window.addEventListener('touchend', handlePointerUp);
+
+        // ==========================================
+        // 12. ניהול שלבים, טיימר וממשק משתמש (UI)
+        // ==========================================
+        function formatTime(seconds) {
+            const s = Math.max(0, Math.ceil(seconds));
+            const mins = Math.floor(s / 60);
+            const secs = s % 60;
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function updateTimerUI() {
+            timerDisplay.textContent = formatTime(state.timeRemaining);
+            if (state.timeRemaining <= 15 && state.isRunning && !state.isStageEnded) {
+                timerDisplay.className = 'text-xl md:text-2xl font-bold text-rose-600 tabular-nums animate-pulse';
+            } else {
+                timerDisplay.className = 'text-xl md:text-2xl font-bold text-sky-700 tabular-nums';
+            }
+        }
+
+        function updateSidebarUI() {
+            // החזרת תיבת ההנחיות למצב צבע רגיל (למקרה שהשתנה לירוק בניצחון)
+            const instrBox = instructionText.parentElement;
+            instrBox.className = "mt-3 bg-amber-50/90 border border-amber-200/90 rounded-xl p-3 transition-colors duration-500";
+            instrBox.querySelector('div').className = "flex items-center gap-1.5 text-amber-800 font-semibold text-xs mb-1";
+            instrBox.querySelector('div').innerHTML = `<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>הנחיות למשימה</span>`;
+            
+            instructionText.className = "text-sm font-medium text-slate-800 leading-snug";
+            instructionText.textContent = STAGE_INSTRUCTIONS[state.currentStage] || STAGE_INSTRUCTIONS[0];
+            
+            doneBtn.disabled = !(state.isRunning && !state.isStageEnded);
+
+            for (let i = 0; i < 3; i++) {
+                const stageNum = i + 1;
+                const btn = stageBtns[i];
+                const icon = stageIcons[i];
+                const res = stageResults[i];
+                const unlocked = state.unlockedStages[i];
+                const savedScore = state.stageScores[i];
+                const isCurrent = state.currentStage === stageNum;
+
+                btn.disabled = !unlocked;
+
+                if (!unlocked) {
+                    btn.className = 'stage-btn flex-1 py-2.5 px-3 rounded-xl text-right font-semibold text-sm border transition-all flex items-center justify-between bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed';
+                    icon.textContent = '🔒';
+                    icon.className = 'text-xs';
+                } else if (isCurrent && state.isRunning) {
+                    btn.className = 'stage-btn flex-1 py-2.5 px-3 rounded-xl text-right font-semibold text-sm border transition-all cursor-pointer flex items-center justify-between bg-sky-600 text-white border-sky-700 shadow-md ring-2 ring-sky-300';
+                    icon.textContent = 'פעיל';
+                    icon.className = 'text-xs bg-white/25 px-2 py-0.5 rounded-full';
+                } else {
+                    btn.className = 'stage-btn flex-1 py-2.5 px-3 rounded-xl text-right font-semibold text-sm border transition-all cursor-pointer flex items-center justify-between bg-white hover:bg-sky-50 text-slate-800 border-slate-300 shadow-sm';
+                    icon.textContent = savedScore !== null ? 'שחק שוב' : 'התחל';
+                    icon.className = 'text-xs bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full';
+                }
+
+                // תצוגת תוצאה סופית ליד כפתור השלב
+                if (savedScore !== null) {
+                    const formattedScore = Number.isInteger(savedScore) ? savedScore : savedScore.toFixed(1);
+                    res.textContent = `תוצאה: ${formattedScore}`;
+                    if (savedScore >= 0) {
+                        res.className = 'min-w-[86px] text-center text-xs font-bold px-2 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200';
+                    } else {
+                        res.className = 'min-w-[86px] text-center text-xs font-bold px-2 py-2 rounded-xl bg-amber-50 text-amber-800 border border-amber-200';
+                    }
+                } else {
+                    res.textContent = 'טרם הושלם';
+                    res.className = 'min-w-[86px] text-center text-xs font-medium px-2 py-2 rounded-xl bg-slate-100 text-slate-400 border border-slate-200';
+                }
+            }
+        }
+
+        // התחלת שלב נבחר
+        function startStage(stageNum) {
+            if (!state.unlockedStages[stageNum - 1]) return;
+
+            state.currentStage = stageNum;
+            state.isRunning = true;
+            state.isStageEnded = false;
+            state.stage3Won = false;
+            state.particles = [];
+            state.timeRemaining = CONFIG.STAGE_DURATION;
+            state.drag.active = false;
+            state.drag.target = null;
+
+            // הסרת מצב החשכה מהקנבס
+            canvas.classList.remove('stage-ended');
+
+            if (stageNum === 1) initStage1();
+            else if (stageNum === 2) initStage2();
+            else if (stageNum === 3) initStage3();
+
+            updateTimerUI();
+            updateSidebarUI();
+        }
+
+        // סיום שלב (כאשר הזמן נגמר או בלחיצה על "סיום שלב")
+        function finishCurrentStage() {
+            if (!state.isRunning || state.isStageEnded) return;
+
+            state.isRunning = false;
+            state.isStageEnded = true;
+            state.drag.active = false;
+            state.drag.target = null;
+
+            // הקפאת הלוח והחשכה עדינה של הקנבס ללא שום טקסט או חלונית על גבי הקנבס
+            canvas.classList.add('stage-ended');
+
+            // שמירת התוצאה הסופית ליד כפתור השלב
+            const idx = state.currentStage - 1;
+            state.stageScores[idx] = state.currentScore;
+
+            // פתיחת השלב הבא אם קיים
+            if (state.currentStage === 1) {
+                state.unlockedStages[1] = true;
+            } else if (state.currentStage === 2) {
+                state.unlockedStages[2] = true;
+            }
+
+            updateTimerUI();
+            updateSidebarUI();
+        }
+
+        // איפוס מלא של המשחק
+        function resetEntireGame() {
+            state.currentStage = 0;
+            state.isRunning = false;
+            state.isStageEnded = false;
+            state.stage3Won = false;
+            state.unlockedStages = [true, false, false];
+            state.stageScores = [null, null, null];
+            state.currentScore = 0;
+            state.timeRemaining = CONFIG.STAGE_DURATION;
+            state.drag.active = false;
+            state.drag.target = null;
+            state.particles = [];
+
+            canvas.classList.remove('stage-ended');
+            buildIdlePreviewBoard();
+            renderScoreText();
+            updateTimerUI();
+            updateSidebarUI();
+        }
+
+        // חיבור מאזינים לכפתורים
+        stageBtns.forEach((btn, idx) => {
+            btn.addEventListener('click', () => startStage(idx + 1));
+        });
+        doneBtn.addEventListener('click', finishCurrentStage);
+        resetBtn.addEventListener('click', resetEntireGame);
+
+        // ==========================================
+        // 13. לולאת אנימציה ראשית (60fps)
+        // ==========================================
+        function gameLoop(timestamp) {
+            if (!state.lastFrameTime) state.lastFrameTime = timestamp;
+            const dt = Math.min((timestamp - state.lastFrameTime) / 1000, 0.05);
+            state.lastFrameTime = timestamp;
+
+            if (state.isRunning && !state.isStageEnded) {
+                // עדכון טיימר ספירה לאחור
+                state.timeRemaining -= dt;
+                if (state.timeRemaining <= 0) {
+                    state.timeRemaining = 0;
+                    updateTimerUI();
+                    finishCurrentStage();
+                } else {
+                    updateTimerUI();
+                }
+
+                // הרצת הפיזיקה
+                stepPhysics(dt);
+            }
+
+            // עדכון חלקיקים תמיד כדי שהזיקוקים יסיימו את האנימציה גם אם השלב נגמר
+            updateParticles();
+            
+            // ציור הלוח בכל פריים
+            drawScene();
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        // אתחול ראשוני בעליית העמוד
+        window.onload = function () {
+            resizeCanvas();
+            resetEntireGame();
+            requestAnimationFrame(gameLoop);
+        };
+    </script>
+</body>
+</html>
